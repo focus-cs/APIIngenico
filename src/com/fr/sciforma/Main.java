@@ -56,7 +56,7 @@ public class Main {
     /**
      * @param args the command line arguments
      */
-    private final static String NUMBER = "1.0";
+    private final static String NUMBER = "1.1";
 
     private final static String PROGRAM = "JIRA-TEMPO / SCIFORMA";
 
@@ -69,7 +69,8 @@ public class Main {
     private static String FLOW_2 = "FLOW_2";
     private static String FLOW_3 = "FLOW_3";
     private static String INTEGRATION = "INTEGRATION";
-
+    private static Boolean INTEGRATION_RUN = false;
+    
     private static Properties properties;
 
     public static Session mSession;
@@ -103,15 +104,23 @@ public class Main {
                 }
 
                 if (args[0].equals(INTEGRATION)) {
-                    loadData();
-                    processTSFilling();
-                    processTSSubmission();
+                    checkRunIntegration();
+                    if(INTEGRATION_RUN){
+                        loadData();
+                        processTSFilling();
+                        processTSSubmission();
+                    }
                 }
 
                 mSession.logout();
                 Logger.info("[main][" + PROGRAM + "][V" + NUMBER + "] End API: " + new Date());
             } catch (PSException ex) {
-                Logger.error(ex);
+                if (ex instanceof LockException) {
+                    LockException lex = (LockException) ex;
+                    Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+                } else {
+                    Logger.error(ex);
+                }
             }
         } else {
             Logger.error("#00: Invalid Argument !");
@@ -154,7 +163,13 @@ public class Main {
             mSession.login(USER, PWD.toCharArray());
             Logger.info("Connecté: " + new Date() + " à l'instance " + CONTEXTE);
         } catch (PSException ex) {
-            Logger.error("Erreur dans la connection de ... " + CONTEXTE, ex);
+            Logger.error("Erreur dans la connection de ... " + CONTEXTE);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
             System.exit(-1);
         } catch (NullPointerException ex) {
             Logger.error("Erreur dans la connection de ... " + CONTEXTE, ex);
@@ -267,13 +282,13 @@ public class Main {
             g.lock();
             populateDataViewJSUBMISSION(dvName2, dvName, g);
             g.save(true);
-        } catch (PSException e) {
-            if (e instanceof LockException) {
-                LockException lex = (LockException) e;
+        } catch (PSException ex) {
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
                 Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
-                System.exit(-1);
+            } else {
+                Logger.error(ex);
             }
-            Logger.error(e);
         } catch (BusinessException ex) {
             Logger.error(ex);
         }
@@ -298,9 +313,9 @@ public class Main {
             if (ex instanceof LockException) {
                 LockException lex = (LockException) ex;
                 Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
-                System.exit(-1);
+            } else {
+                Logger.error(ex);
             }
-            Logger.error(ex);
         } catch (Exception ex) {
             Logger.error(ex);
         }
@@ -317,7 +332,12 @@ public class Main {
         } catch (TechnicalException ex) {
             Logger.error(ex);
         } catch (PSException ex) {
-            Logger.error(ex);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
         }
     }
 
@@ -330,7 +350,12 @@ public class Main {
         } catch (TechnicalException ex) {
             Logger.error(ex);
         } catch (PSException ex) {
-            Logger.error(ex);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
         }
     }
 
@@ -351,7 +376,12 @@ public class Main {
         } catch (TechnicalException ex) {
             Logger.error(ex);
         } catch (PSException ex) {
-            Logger.error(ex);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
         } catch (ParseException ex) {
             Logger.error(ex);
         } catch (NumberFormatException ex) {
@@ -376,9 +406,37 @@ public class Main {
                 new_dvr.setStringField("email", res);
             }
         } catch (PSException ex) {
-            Logger.error(ex);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
         }
 
+    }
+
+    private static void checkRunIntegration() {
+        Logger.info("************ Start of checkRunIntegration ************");
+        try {
+
+            Global g = new Global();
+            List pl = mSession.getDataViewRowList("JIRA I/F Admin", g);
+            Iterator pit = pl.iterator();
+            while (pit.hasNext()) {
+                DataViewRow dvr = (DataViewRow) pit.next();
+                Logger.info("Field TTRCKFlag :" + dvr.getBooleanField("TTRCKFlag"));
+                INTEGRATION_RUN = dvr.getBooleanField("TTRCKFlag");
+            }
+        } catch (PSException ex) {
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            } else {
+                Logger.error(ex);
+            }
+        }
+        Logger.info("************ End of checkRunIntegration ************");
     }
 
     private static void processTSFilling() {
@@ -407,9 +465,9 @@ public class Main {
                     logError(dvr, "00", "Resource not found for " + dvr.getStringField("Res_ID"));
                 } else {
                     Logger.info("Resource find => " + resource.getStringField("Name"));
-                }
-                if(!resource.getStringField("Status").equals("ACTIVE")){
-                    logError(dvr, "04", resource.getStringField("Name") + " is " + resource.getStringField("Status"));
+                    if (!resource.getStringField("Status").equals("ACTIVE")) {
+                        logError(dvr, "04", resource.getStringField("Name") + " is " + resource.getStringField("Status"));
+                    }
                 }
 
                 Logger.info("Search project ...");
@@ -525,8 +583,8 @@ public class Main {
                 Iterator jTimeIt = dvJTime.iterator();
                 while (jTimeIt.hasNext()) {
                     DataViewRow dvrjTime = (DataViewRow) jSubIt.next();
-                    if(email.equals(dvrjTime.getStringField("Res_ID"))){
-                        if(dvrjTime.getStringField("fill_status").equals("TD")){
+                    if (email.equals(dvrjTime.getStringField("Res_ID"))) {
+                        if (dvrjTime.getStringField("fill_status").equals("TD")) {
                             submission_status = dvrjTime.getStringField("fill_status");
                             submission_error_c = dvrjTime.getStringField("fill_error_code");
                             submission_message = dvrjTime.getStringField("fill_message");
@@ -559,12 +617,12 @@ public class Main {
                 Logger.info("Load project " + cpt + "/" + size);
                 Project p = pit.next();
                 //if (p.getStringField("Name").equals("Roadmap Axis Payment 2018")) {
-                    p.open(true);
-                    if (!p.getStringField("SAP_ID").isEmpty()) {
-                        projectBySAPId.put(p.getStringField("SAP_ID"), p);
-                        //Logger.info("Add code => " + p.getStringField("SAP_ID"));
-                    }
-                    p.close();
+                p.open(true);
+                if (!p.getStringField("SAP_ID").isEmpty()) {
+                    projectBySAPId.put(p.getStringField("SAP_ID"), p);
+                    //Logger.info("Add code => " + p.getStringField("SAP_ID"));
+                }
+                p.close();
                 //}
                 cpt++;
             }
@@ -577,107 +635,6 @@ public class Main {
             Logger.error(ex);
         }
         Logger.info("************ End of loadData ************");
-    }
-
-    private static void dumpForTesting(Timesheet t) throws PSException {
-        System.out.println("");
-        System.out.println("==============================================================");
-        System.out.println("Timesheet for " + t.getResource().toString() + " on: " + DateFormat.getDateInstance().format(t.getWeekDate()));
-        System.out.println("Timesheet status: " + t.getStatusName());
-        System.out.println("==============================================================");
-        List l = t.getTimesheetAssignmentList();
-        if (l == null) {
-            System.out.println("  No assignments");
-        } else {
-            Iterator it = l.iterator();
-            while (it.hasNext()) {
-                TimesheetAssignment ta = (TimesheetAssignment) it.next();
-                dumpAssignmentForTesting(ta);
-            }
-        }
-    }
-
-    private static void dumpAssignmentForTesting(TimesheetAssignment ta) throws PSException {
-        java.util.List list;
-        Iterator it;
-        try {
-            System.out.println("----------------- Assignment -------------------");
-            System.out.println("Assignment status: " + ta.getStatus() + " (" + ta.getStatusName() + ")");
-            System.out.println("String fields dump: ");
-            System.out.println("  ID: " + ta.getStringField("ID"));
-            System.out.println("  Name: " + ta.getStringField("Name"));
-            System.out.println("  Project ID: " + ta.getStringField("Project ID"));
-            System.out.println("  Project Name: " + ta.getStringField("Project Name"));
-            System.out.println("  Work Package ID: " + ta.getStringField("Work Package ID"));
-            System.out.println("  Work Package Name: " + ta.getStringField("Work Package Name"));
-            System.out.println("  WBS: " + ta.getStringField("WBS"));
-
-            System.out.println("Double fields dump: ");
-            System.out.println("  % Complete: " + ta.getDoubleField("% Complete"));
-            System.out.println("  Duration: " + ta.getDoubleField("Duration"));
-            System.out.println("  Actual Effort: " + ta.getDoubleField("Actual Effort"));
-            System.out.println("  Remaining Effort: " + ta.getDoubleField("Remaining Effort"));
-            System.out.println("  Remaining Estimate: " + ta.getDoubleField("Remaining Estimate"));
-
-            System.out.println("Date fields dump: ");
-            testDateField(ta, "Start");
-            testDateField(ta, "Finish");
-            testDateField(ta, "Actual Start");
-            testDateField(ta, "Actual Finish");
-            testDateField(ta, "Completed Date");
-            testDateField(ta, "Last Update");
-
-            System.out.println("Dated Data fields dump:");
-            list = ta.getDatedData("Daily Notes");
-            it = (list.iterator());
-            System.out.println("  Daily Notes:");
-            while (it.hasNext()) {
-                StringDatedData note = (StringDatedData) it.next();
-                System.out.println("    Daily note for " + DateFormat.getDateInstance().format(note.getStart()) + " to " + DateFormat.getDateInstance().format(note.getFinish()) + ":");
-                System.out.println("       > " + note.getData());
-            }
-
-            list = ta.getDatedData("Actuals");
-            it = (list.iterator());
-            System.out.println("  Actuals:");
-            while (it.hasNext()) {
-                DoubleDatedData actuals = (DoubleDatedData) it.next();
-                System.out.println("    Actuals for " + DateFormat.getDateInstance().format(actuals.getStart()) + " to " + DateFormat.getDateInstance().format(actuals.getFinish()) + ":");
-                System.out.println("       > " + actuals.getData() + "h");
-            }
-
-            list = ta.getDatedData("Planned");
-            it = (list.iterator());
-            System.out.println("  Planned:");
-            while (it.hasNext()) {
-                DoubleDatedData actuals = (DoubleDatedData) it.next();
-                System.out.println("    Planned hours for " + DateFormat.getDateInstance().format(actuals.getStart()) + " to " + DateFormat.getDateInstance().format(actuals.getFinish()) + ":");
-                System.out.println("       > " + actuals.getData() + "h");
-            }
-
-            list = ta.getDatedData("Status", DatedData.DAY, ta.getDateField("Start"), ta.getDateField("Finish"));
-            it = list.iterator();
-            System.out.println("  Daily status:");
-            while (it.hasNext()) {
-                StringDatedData status = (StringDatedData) it.next();
-                System.out.println("    Status for " + DateFormat.getDateInstance().format(status.getStart()) + " to " + DateFormat.getDateInstance().format(status.getFinish()) + ":");
-                System.out.println("       > " + status.getData());
-            }
-
-        } catch (PSException e) {
-            System.out.println("An exception occurred during Timesheet API testing:");
-            System.out.println(e.getLocalizedMessage());
-        }
-    }
-
-    private static void testDateField(TimesheetAssignment ta, String fieldname) throws PSException {
-        java.util.Date d = ta.getDateField(fieldname);
-        System.out.print("  " + fieldname + ": ");
-        if (d != null) {
-            System.out.println(DateFormat.getDateInstance().format(d));
-        } else {
-            System.out.println("<no date specified>");
-        }
     }
 
     private static void applyTimeSheet(Resource resource, Task t, DataViewRow dvr) {
@@ -788,7 +745,12 @@ public class Main {
 
             error = true;
         } catch (PSException ex) {
-            Logger.error(ex);
+            if (ex instanceof LockException) {
+                LockException lex = (LockException) ex;
+                Logger.error("================= Lock by " + lex.getLockingUser() + " =================");
+            }else{
+                Logger.error(ex);
+            }
         }
     }
 
